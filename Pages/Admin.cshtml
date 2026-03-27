@@ -1,0 +1,605 @@
+@page
+@{
+    ViewData["Title"] = "Admin";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no,viewport-fit=cover" />
+    <title>PACMAN GPS - Admin</title>
+    <link rel="stylesheet" href="/lib/leaflet/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: #000;
+            color: #FFD700;
+            font-family: 'Press Start 2P', monospace;
+            min-height: 100dvh;
+        }
+        .login-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100dvh;
+            gap: 16px;
+            padding: 20px;
+        }
+        .login-screen.hidden { display: none; }
+        .login-screen h1 { font-size: 16px; text-align: center; }
+        input, select {
+            padding: 10px;
+            background: #111;
+            border: 1px solid #FFD700;
+            color: #FFD700;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 11px;
+            border-radius: 4px;
+            outline: none;
+            width: 100%;
+        }
+        input:focus, select:focus { border-color: #00BFFF; }
+        .btn {
+            padding: 12px 20px;
+            background: #FFD700;
+            color: #000;
+            border: none;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .btn:hover { background: #FFF; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #FFD700;
+            color: #FFD700;
+        }
+        .btn-danger { background: #FF4444; color: #FFF; }
+        .btn-green { background: #00CC66; color: #000; }
+        .btn-blue { background: #00BFFF; color: #000; }
+        .btn-small { padding: 8px 12px; font-size: 8px; width: auto; }
+
+        /* Dashboard */
+        .dashboard { display: none; padding: 16px; }
+        .dashboard.show { display: block; }
+        .dash-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .dash-header h2 { font-size: 12px; }
+
+        /* Game list */
+        .game-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        .game-card {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .game-card:hover { border-color: #FFD700; }
+        .game-card.selected { border-color: #00BFFF; background: #0a1a2a; }
+        .game-card .name { font-size: 10px; }
+        .game-card .meta { font-size: 7px; color: #888; }
+        .game-card .status {
+            font-size: 8px;
+            padding: 3px 6px;
+            border-radius: 3px;
+        }
+        .status-waiting { background: #555; color: #FFF; }
+        .status-active { background: #00CC66; color: #000; }
+        .status-finished { background: #FF4444; color: #FFF; }
+
+        /* Create form */
+        .create-section {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .create-section.show { display: block; }
+        .form-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        .form-row label {
+            font-size: 8px;
+            min-width: 100px;
+            color: #888;
+        }
+        .form-row input, .form-row select { flex: 1; }
+        #createMap {
+            width: 100%;
+            height: 250px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .hint { font-size: 7px; color: #666; margin-bottom: 8px; }
+
+        /* Game dashboard */
+        .game-dashboard {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 16px;
+            display: none;
+        }
+        .game-dashboard.show { display: block; }
+        .stats-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            flex: 1;
+            min-width: 80px;
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 4px;
+            padding: 10px;
+            text-align: center;
+        }
+        .stat-card .value { font-size: 18px; color: #FFF; }
+        .stat-card .label { font-size: 7px; color: #888; margin-top: 4px; }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .action-buttons .btn { flex: 1; min-width: 100px; }
+        #gameMap {
+            width: 100%;
+            height: 300px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .qr-section {
+            text-align: center;
+            margin-top: 12px;
+        }
+        .qr-section img {
+            margin: 8px auto;
+            display: block;
+            border-radius: 4px;
+        }
+        .join-url {
+            font-size: 8px;
+            color: #00BFFF;
+            word-break: break-all;
+        }
+        .player-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .player-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #222;
+            font-size: 8px;
+        }
+        .player-row .pname { color: #FFF; }
+        .player-row .pscore { color: #FFD700; }
+        .loading { font-size: 10px; color: #888; text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+    <!-- Login -->
+    <div class="login-screen" id="loginScreen">
+        <h1>ADMIN<br>PANEL</h1>
+        <input type="password" id="adminPwd" placeholder="PASSWORD" style="max-width:300px" />
+        <button class="btn" style="max-width:300px" onclick="login()">LOGIN</button>
+        <div style="font-size:8px;color:#FF4444;display:none" id="loginError">Wrong password</div>
+        <a href="/" style="font-size:8px;color:#555;margin-top:20px;text-decoration:none">BACK TO MENU</a>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard">
+        <div class="dash-header">
+            <h2>PACMAN GPS ADMIN</h2>
+            <button class="btn btn-small btn-outline" onclick="toggleCreate()">+ NEW GAME</button>
+        </div>
+
+        <!-- Create game form -->
+        <div class="create-section" id="createSection">
+            <div class="form-row">
+                <label>GAME NAME</label>
+                <input type="text" id="gameName" placeholder="Downtown Pacman" />
+            </div>
+            <div class="hint">Click on the map to set the center point</div>
+            <div id="createMap"></div>
+            <div class="form-row">
+                <label>RADIUS (m)</label>
+                <input type="number" id="gameRadius" value="500" min="100" max="5000" />
+            </div>
+            <div class="form-row">
+                <label>TIME LIMIT</label>
+                <input type="number" id="timeLimit" value="60" min="5" max="360" /> <span style="font-size:8px">min</span>
+            </div>
+            <div class="form-row">
+                <label>END CONDITION</label>
+                <select id="endCondition">
+                    <option value="time">Time limit</option>
+                    <option value="allDots">All dots eaten</option>
+                    <option value="manual">Manual stop</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>GHOSTS</label>
+                <select id="ghostsEnabled">
+                    <option value="false">Disabled</option>
+                    <option value="true">Enabled</option>
+                </select>
+            </div>
+            <div class="form-row" id="ghostEffectRow" style="display:none">
+                <label>GHOST EFFECT</label>
+                <select id="ghostEffect">
+                    <option value="points">Lose 20% points</option>
+                    <option value="freeze">Freeze 30s</option>
+                    <option value="both">Both (10% + 20s)</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>TEAMS</label>
+                <select id="teamsEnabled">
+                    <option value="false">Individual</option>
+                    <option value="true">Teams</option>
+                </select>
+            </div>
+            <div class="form-row" id="teamCountRow" style="display:none">
+                <label>TEAM COUNT</label>
+                <select id="teamCount">
+                    <option value="2">2 Teams</option>
+                    <option value="3">3 Teams</option>
+                    <option value="4">4 Teams</option>
+                </select>
+            </div>
+            <button class="btn btn-green" onclick="createGame()" id="createBtn">CREATE GAME</button>
+            <div class="loading" id="createLoading" style="display:none">Generating dots from map data...</div>
+        </div>
+
+        <!-- Game list -->
+        <div class="game-list" id="gameList"></div>
+
+        <!-- Selected game dashboard -->
+        <div class="game-dashboard" id="gameDashboard">
+            <h3 id="selectedGameName" style="font-size:11px;margin-bottom:12px"></h3>
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="value" id="statDots">0</div>
+                    <div class="label">DOTS</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="statPlayers">0</div>
+                    <div class="label">PLAYERS</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="statCollected">0</div>
+                    <div class="label">COLLECTED</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="statStatus">-</div>
+                    <div class="label">STATUS</div>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-green btn-small" onclick="startGame()" id="btnStart">START</button>
+                <button class="btn btn-danger btn-small" onclick="stopGame()" id="btnStop">STOP</button>
+                <button class="btn btn-outline btn-small" onclick="resetGame()">RESET</button>
+                <button class="btn btn-danger btn-small" onclick="deleteGame()">DELETE</button>
+            </div>
+            <div id="gameMap"></div>
+            <h4 style="font-size:9px;margin-bottom:8px;color:#888">PLAYERS</h4>
+            <div class="player-list" id="playerList"></div>
+            <div class="qr-section">
+                <div style="font-size:9px;margin-bottom:4px">SHARE GAME</div>
+                <div class="join-url" id="joinUrl"></div>
+                <img id="qrCode" width="200" height="200" alt="QR Code" />
+            </div>
+        </div>
+    </div>
+
+    <script src="/lib/leaflet/leaflet.js"></script>
+    <script>
+    (function() {
+        let adminPwd = sessionStorage.getItem('pacman_admin_pwd') || '';
+        let games = [];
+        let selectedGameId = null;
+        let createMap, createMarker, createCircle;
+        let gameMap, gameDotLayer;
+        let createLat = 55.676, createLng = 12.568;
+        let refreshInterval;
+
+        document.getElementById('adminPwd').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+        document.getElementById('ghostsEnabled').addEventListener('change', e => {
+            document.getElementById('ghostEffectRow').style.display = e.target.value === 'true' ? 'flex' : 'none';
+        });
+        document.getElementById('teamsEnabled').addEventListener('change', e => {
+            document.getElementById('teamCountRow').style.display = e.target.value === 'true' ? 'flex' : 'none';
+        });
+
+        if (adminPwd) {
+            verifyAndShow();
+        }
+
+        window.login = async function() {
+            adminPwd = document.getElementById('adminPwd').value;
+            await verifyAndShow();
+        };
+
+        async function verifyAndShow() {
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'X-Admin-Password': adminPwd }
+                });
+                if (!res.ok) {
+                    document.getElementById('loginError').style.display = 'block';
+                    return;
+                }
+                sessionStorage.setItem('pacman_admin_pwd', adminPwd);
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('dashboard').classList.add('show');
+                loadGames();
+                refreshInterval = setInterval(refreshSelectedGame, 5000);
+            } catch {
+                document.getElementById('loginError').style.display = 'block';
+            }
+        }
+
+        function apiHeaders() {
+            return { 'X-Admin-Password': adminPwd, 'Content-Type': 'application/json' };
+        }
+
+        async function loadGames() {
+            const res = await fetch('/api/admin/games', { headers: apiHeaders() });
+            games = await res.json();
+            renderGameList();
+        }
+
+        function renderGameList() {
+            const container = document.getElementById('gameList');
+            container.innerHTML = games.map(g => `
+                <div class="game-card ${g.id === selectedGameId ? 'selected' : ''}" onclick="selectGame('${g.id}')">
+                    <div>
+                        <div class="name">${g.name}</div>
+                        <div class="meta">${g.id} | ${g.dotCount} dots | ${g.playerCount} players</div>
+                    </div>
+                    <span class="status status-${g.status}">${g.status.toUpperCase()}</span>
+                </div>
+            `).join('') || '<div style="font-size:8px;color:#555;text-align:center;padding:20px">No games yet</div>';
+        }
+
+        window.selectGame = async function(id) {
+            selectedGameId = id;
+            renderGameList();
+
+            const res = await fetch(`/api/games/${id}`, { headers: apiHeaders() });
+            const game = await res.json();
+
+            document.getElementById('gameDashboard').classList.add('show');
+            document.getElementById('selectedGameName').textContent = game.name;
+            document.getElementById('statDots').textContent = game.dotCount + game.powerUpCount;
+            document.getElementById('statPlayers').textContent = game.playerCount;
+            document.getElementById('statStatus').textContent = game.status.toUpperCase();
+
+            // Count collected
+            const dotsRes = await fetch(`/api/games/${id}/dots`);
+            const dotsData = await dotsRes.json();
+            const collected = dotsData.dots.filter(d => d.collected).length + dotsData.powerUps.filter(p => p.collected).length;
+            document.getElementById('statCollected').textContent = collected;
+
+            // QR code and join URL
+            const joinUrl = `${location.origin}/?game=${id}`;
+            document.getElementById('joinUrl').textContent = joinUrl;
+            document.getElementById('qrCode').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}&bgcolor=000000&color=FFD700`;
+
+            // Game map
+            if (gameMap) gameMap.remove();
+            setTimeout(() => {
+                gameMap = L.map('gameMap', { zoomControl: true, attributionControl: false })
+                    .setView([game.centerLat, game.centerLng], 15);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 20, subdomains: 'abcd'
+                }).addTo(gameMap);
+
+                // Radius circle
+                L.circle([game.centerLat, game.centerLng], {
+                    radius: game.radiusMeters,
+                    color: '#FFD700',
+                    fillColor: '#FFD700',
+                    fillOpacity: 0.05,
+                    weight: 1,
+                    dashArray: '5,5'
+                }).addTo(gameMap);
+
+                // Dots
+                gameDotLayer = L.layerGroup().addTo(gameMap);
+                dotsData.dots.forEach(d => {
+                    L.circleMarker([d.lat, d.lng], {
+                        radius: 2,
+                        fillColor: d.collected ? '#333' : '#FFD700',
+                        fillOpacity: d.collected ? 0.3 : 0.8,
+                        stroke: false,
+                        interactive: false
+                    }).addTo(gameDotLayer);
+                });
+                dotsData.powerUps.forEach(p => {
+                    L.circleMarker([p.lat, p.lng], {
+                        radius: 4,
+                        fillColor: p.collected ? '#333' : '#FF69B4',
+                        fillOpacity: p.collected ? 0.3 : 1,
+                        stroke: false,
+                        interactive: false
+                    }).addTo(gameDotLayer);
+                });
+            }, 100);
+
+            // Players
+            await loadPlayers(id);
+        };
+
+        async function loadPlayers(id) {
+            const res = await fetch(`/api/admin/games/${id}/players`, { headers: apiHeaders() });
+            const players = await res.json();
+            document.getElementById('playerList').innerHTML = players.map(p =>
+                `<div class="player-row">
+                    <span class="pname">${p.name}${p.team ? ' ['+p.team+']' : ''}</span>
+                    <span class="pscore">${p.score} pts | ${p.dotsEaten} dots</span>
+                </div>`
+            ).join('') || '<div style="font-size:7px;color:#555">No players yet</div>';
+        }
+
+        async function refreshSelectedGame() {
+            if (!selectedGameId) return;
+            try {
+                await loadGames();
+                const res = await fetch(`/api/games/${selectedGameId}`);
+                const game = await res.json();
+                document.getElementById('statPlayers').textContent = game.playerCount;
+                document.getElementById('statStatus').textContent = game.status.toUpperCase();
+                await loadPlayers(selectedGameId);
+            } catch {}
+        }
+
+        // ==================== Create Game ====================
+        window.toggleCreate = function() {
+            const section = document.getElementById('createSection');
+            section.classList.toggle('show');
+            if (section.classList.contains('show') && !createMap) {
+                setTimeout(initCreateMap, 100);
+            }
+        };
+
+        function initCreateMap() {
+            createMap = L.map('createMap', { zoomControl: true, attributionControl: false })
+                .setView([55.676, 12.568], 14);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 20, subdomains: 'abcd'
+            }).addTo(createMap);
+
+            createMap.on('click', (e) => {
+                createLat = e.latlng.lat;
+                createLng = e.latlng.lng;
+                updateCreateMarker();
+            });
+
+            // Try to use current location
+            navigator.geolocation?.getCurrentPosition(pos => {
+                createLat = pos.coords.latitude;
+                createLng = pos.coords.longitude;
+                createMap.setView([createLat, createLng], 15);
+                updateCreateMarker();
+            });
+        }
+
+        function updateCreateMarker() {
+            const radius = parseInt(document.getElementById('gameRadius').value) || 500;
+            if (createMarker) createMap.removeLayer(createMarker);
+            if (createCircle) createMap.removeLayer(createCircle);
+            createMarker = L.circleMarker([createLat, createLng], {
+                radius: 6, fillColor: '#FFD700', fillOpacity: 1, stroke: true, color: '#FFF', weight: 2
+            }).addTo(createMap);
+            createCircle = L.circle([createLat, createLng], {
+                radius, color: '#FFD700', fillColor: '#FFD700', fillOpacity: 0.1, weight: 1, dashArray: '5,5'
+            }).addTo(createMap);
+        }
+
+        document.getElementById('gameRadius').addEventListener('input', updateCreateMarker);
+
+        window.createGame = async function() {
+            const name = document.getElementById('gameName').value.trim();
+            if (!name) { alert('Enter a game name'); return; }
+
+            const body = {
+                name,
+                centerLat: createLat,
+                centerLng: createLng,
+                radiusMeters: parseInt(document.getElementById('gameRadius').value) || 500,
+                settings: {
+                    timeLimitMinutes: parseInt(document.getElementById('timeLimit').value) || 60,
+                    endCondition: document.getElementById('endCondition').value,
+                    ghostsEnabled: document.getElementById('ghostsEnabled').value === 'true',
+                    ghostEffect: document.getElementById('ghostEffect').value,
+                    teamsEnabled: document.getElementById('teamsEnabled').value === 'true',
+                    teamCount: parseInt(document.getElementById('teamCount').value) || 2
+                }
+            };
+
+            document.getElementById('createBtn').style.display = 'none';
+            document.getElementById('createLoading').style.display = 'block';
+
+            try {
+                const res = await fetch('/api/admin/games', {
+                    method: 'POST',
+                    headers: apiHeaders(),
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    const err = await res.text();
+                    alert('Error: ' + err);
+                    return;
+                }
+
+                const result = await res.json();
+                alert(`Game created! ${result.dotCount} dots + ${result.powerUpCount} power-ups generated.`);
+                document.getElementById('createSection').classList.remove('show');
+                await loadGames();
+                selectGame(result.id);
+            } catch (err) {
+                alert('Error creating game: ' + err.message);
+            } finally {
+                document.getElementById('createBtn').style.display = 'block';
+                document.getElementById('createLoading').style.display = 'none';
+            }
+        };
+
+        // ==================== Game Actions ====================
+        window.startGame = async function() {
+            if (!selectedGameId) return;
+            await fetch(`/api/admin/games/${selectedGameId}/start`, { method: 'POST', headers: apiHeaders() });
+            refreshSelectedGame();
+        };
+
+        window.stopGame = async function() {
+            if (!selectedGameId || !confirm('Stop this game?')) return;
+            await fetch(`/api/admin/games/${selectedGameId}/stop`, { method: 'POST', headers: apiHeaders() });
+            refreshSelectedGame();
+        };
+
+        window.resetGame = async function() {
+            if (!selectedGameId || !confirm('Reset this game? All progress will be lost.')) return;
+            await fetch(`/api/admin/games/${selectedGameId}/reset`, { method: 'POST', headers: apiHeaders() });
+            refreshSelectedGame();
+        };
+
+        window.deleteGame = async function() {
+            if (!selectedGameId || !confirm('Delete this game permanently?')) return;
+            await fetch(`/api/admin/games/${selectedGameId}`, { method: 'DELETE', headers: apiHeaders() });
+            selectedGameId = null;
+            document.getElementById('gameDashboard').classList.remove('show');
+            loadGames();
+        };
+    })();
+    </script>
+</body>
+</html>

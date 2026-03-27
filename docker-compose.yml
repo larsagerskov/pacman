@@ -1,0 +1,13 @@
+services:
+  pacman:
+    build: .
+    ports:
+      - "8480:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - TZ=Europe/Copenhagen
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

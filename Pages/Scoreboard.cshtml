@@ -1,0 +1,214 @@
+@page
+@{
+    ViewData["Title"] = "Scoreboard";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no,viewport-fit=cover" />
+    <title>PACMAN GPS - Scoreboard</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: #000;
+            color: #FFD700;
+            font-family: 'Press Start 2P', monospace;
+            min-height: 100dvh;
+            padding: 20px;
+            padding-top: calc(20px + env(safe-area-inset-top));
+        }
+        h1 { font-size: 16px; text-align: center; margin-bottom: 8px; }
+        .game-name { font-size: 10px; text-align: center; color: #00BFFF; margin-bottom: 20px; }
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #222;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #FFD700;
+            transition: width 0.5s;
+        }
+        .progress-label {
+            font-size: 8px;
+            color: #888;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .sb-row {
+            display: flex;
+            padding: 10px 8px;
+            border-bottom: 1px solid #222;
+            align-items: center;
+            gap: 10px;
+        }
+        .sb-row.me { background: #111; }
+        .sb-rank { width: 40px; font-size: 14px; text-align: center; }
+        .sb-color {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .sb-name { flex: 1; font-size: 9px; color: #FFF; }
+        .sb-team { font-size: 7px; color: #888; }
+        .sb-score { font-size: 12px; color: #FFD700; text-align: right; }
+        .sb-dots { font-size: 7px; color: #888; text-align: right; }
+        .team-section {
+            margin-bottom: 16px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .team-header {
+            padding: 10px;
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .timer { font-size: 12px; text-align: center; color: #FF4444; margin-bottom: 12px; }
+        .back-link {
+            display: block;
+            text-align: center;
+            color: #555;
+            font-size: 8px;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+        .scanline {
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            pointer-events: none;
+            background: repeating-linear-gradient(transparent 0px, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px);
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <h1>SCOREBOARD</h1>
+    <div class="game-name" id="gameName"></div>
+    <div class="timer" id="timer" style="display:none"></div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">0/0 dots collected</div>
+    <div id="scoreboardContent"></div>
+    <a href="/" class="back-link">BACK TO MENU</a>
+
+    <script src="/lib/microsoft-signalr/signalr.min.js"></script>
+    <script>
+    (function() {
+        const params = new URLSearchParams(location.search);
+        const gameId = params.get('game');
+        const myName = localStorage.getItem(`pacman_name_${gameId}`) || '';
+        if (!gameId) { location.href = '/'; return; }
+
+        let gameData = null;
+        const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+
+        async function init() {
+            const res = await fetch(`/api/games/${gameId}`);
+            if (!res.ok) { location.href = '/'; return; }
+            gameData = await res.json();
+            document.getElementById('gameName').textContent = gameData.name;
+
+            await refresh();
+            setInterval(refresh, 5000);
+
+            if (gameData.endsAt) {
+                setInterval(updateTimer, 1000);
+            }
+
+            // SignalR for live updates
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl('/pacmanHub')
+                .withAutomaticReconnect()
+                .build();
+            connection.on('DotsCollected', () => refresh());
+            connection.on('GameEnded', () => refresh());
+            connection.on('GameReset', () => location.reload());
+            await connection.start();
+            await connection.invoke('JoinGame', gameId, myName || '__spectator__');
+        }
+
+        async function refresh() {
+            const res = await fetch(`/api/games/${gameId}/scoreboard`);
+            const data = await res.json();
+            render(data);
+        }
+
+        function render(data) {
+            const container = document.getElementById('scoreboardContent');
+            const total = data.totalDots || 1;
+
+            if (data.teams && data.teamScores) {
+                let collected = 0;
+                container.innerHTML = data.teamScores.map((team, ti) => {
+                    const teamCollected = team.dotsEaten || 0;
+                    collected += teamCollected;
+                    return `
+                        <div class="team-section">
+                            <div class="team-header" style="background:${team.color}20;color:${team.color}">
+                                <span>${medals[ti]||''} ${team.name}</span>
+                                <span>${team.score} PTS</span>
+                            </div>
+                            ${team.players.map((p, i) => `
+                                <div class="sb-row ${p.name === myName ? 'me' : ''}">
+                                    <div class="sb-name">${p.name}</div>
+                                    <div class="sb-score">${p.score}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }).join('');
+
+                document.getElementById('progressFill').style.width = `${(collected/total)*100}%`;
+                document.getElementById('progressLabel').textContent = `${collected}/${total} dots collected`;
+            } else {
+                const players = data.players || [];
+                let collected = players.reduce((sum, p) => sum + (p.dotsEaten || 0), 0);
+
+                container.innerHTML = players.map((p, i) => `
+                    <div class="sb-row ${p.name === myName ? 'me' : ''}">
+                        <div class="sb-rank">${medals[i] || (i+1)}</div>
+                        <div class="sb-color" style="background:${p.color || '#FFD700'}"></div>
+                        <div>
+                            <div class="sb-name">${p.name}</div>
+                            ${p.team ? `<div class="sb-team">${p.team}</div>` : ''}
+                        </div>
+                        <div style="flex:1"></div>
+                        <div>
+                            <div class="sb-score">${p.score}</div>
+                            <div class="sb-dots">${p.dotsEaten} dots</div>
+                        </div>
+                    </div>
+                `).join('');
+
+                document.getElementById('progressFill').style.width = `${(collected/total)*100}%`;
+                document.getElementById('progressLabel').textContent = `${collected}/${total} dots collected`;
+            }
+        }
+
+        function updateTimer() {
+            if (!gameData?.endsAt) return;
+            const remaining = Math.max(0, new Date(gameData.endsAt) - Date.now());
+            if (remaining <= 0) {
+                document.getElementById('timer').textContent = 'GAME OVER';
+                document.getElementById('timer').style.display = 'block';
+                return;
+            }
+            const min = Math.floor(remaining / 60000);
+            const sec = Math.floor((remaining % 60000) / 1000);
+            document.getElementById('timer').textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+            document.getElementById('timer').style.display = 'block';
+        }
+
+        init();
+    })();
+    </script>
+</body>
+</html>

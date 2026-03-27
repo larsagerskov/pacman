@@ -1,0 +1,1123 @@
+@page
+@{
+    ViewData["Title"] = "Play";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no,viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>PACMAN GPS</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/lib/leaflet/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <style>
+        :root {
+            --pac-yellow: #FFD700;
+            --pac-blue: #2121DE;
+            --pac-pink: #FFB8FF;
+            --pac-cyan: #00FFFF;
+            --pac-orange: #FFB852;
+            --pac-red: #FF0000;
+            --dot-color: #FFD700;
+            --dot-size: 6px;
+            --power-size: 14px;
+            --safe-top: env(safe-area-inset-top);
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; overflow:hidden; background:#000; }
+        body { font-family: 'Press Start 2P', monospace; color: var(--pac-yellow); }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+        }
+
+        /* Header */
+        .header {
+            background: #111;
+            padding: 8px 12px;
+            padding-top: calc(8px + var(--safe-top));
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid var(--pac-blue);
+            z-index: 1000;
+            flex-shrink: 0;
+        }
+        .header .title { font-size: 10px; color: var(--pac-yellow); }
+        .header .score-display { font-size: 14px; color: #FFF; }
+        .header .dot-count { font-size: 8px; color: #888; }
+        .header .status-dots { display: flex; gap: 4px; }
+        .header .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot.gps { background: #00FF00; animation: blink 1s infinite; }
+        .dot.signal { background: #00BFFF; }
+        .dot.off { background: #FF0000; }
+        @@keyframes blink { 50% { opacity: 0.3; } }
+
+        /* Map */
+        .map-wrap {
+            flex: 1;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #0a0a0a;
+        }
+        .leaflet-container { background: #0a0a0a !important; }
+
+        /* HUD overlay */
+        .hud {
+            position: absolute;
+            bottom: 0;
+            left: 0; right: 0;
+            padding: 12px;
+            padding-bottom: calc(12px + var(--safe-bottom));
+            background: linear-gradient(transparent, rgba(0,0,0,0.9));
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .hud > * { pointer-events: auto; }
+        .power-ups-hud {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .power-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 7px;
+            color: #000;
+            font-family: 'Press Start 2P', monospace;
+            animation: pulse 1s infinite;
+        }
+        @@keyframes pulse { 50% { opacity: 0.7; } }
+        .hud-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .hud-btn {
+            flex: 1;
+            padding: 10px;
+            background: #222;
+            border: 1px solid var(--pac-blue);
+            color: var(--pac-yellow);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .hud-btn:active { background: var(--pac-blue); }
+
+        /* Center button */
+        .btn-center {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            width: 36px; height: 36px;
+            background: #222;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #FFF;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Pacman player marker */
+        .pacman-marker {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            position: relative;
+            filter: drop-shadow(0 0 6px rgba(255,215,0,0.6));
+        }
+        .pacman-marker.eating {
+            animation: pacman-chomp 0.3s infinite;
+        }
+        @@keyframes pacman-chomp {
+            0%, 100% { clip-path: circle(50%); }
+            50% { clip-path: polygon(100% 50%, 50% 50%, 75% 20%, 100% 0, 100% 100%, 75% 80%); }
+        }
+        .other-player-marker {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 2px solid #FFF;
+            filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
+        }
+        .player-name-label {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            color: #FFF;
+            text-shadow: 0 0 4px #000, 1px 1px 0 #000;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        /* Ghost markers */
+        .ghost-marker {
+            width: 26px; height: 30px;
+            border-radius: 50% 50% 0 0;
+            position: relative;
+        }
+        .ghost-marker::after {
+            content: '';
+            position: absolute;
+            bottom: -3px; left: 0; right: 0;
+            height: 6px;
+            background: inherit;
+            clip-path: polygon(0 0, 25% 100%, 50% 0, 75% 100%, 100% 0);
+        }
+        .ghost-marker.vulnerable {
+            background: #2121DE !important;
+            animation: ghost-blink 0.5s infinite;
+        }
+        @@keyframes ghost-blink { 50% { opacity: 0.5; } }
+
+        /* Power pellet on map */
+        .power-pellet-marker {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            animation: power-glow 0.8s infinite alternate;
+        }
+        @@keyframes power-glow {
+            from { transform: scale(1); filter: brightness(1); }
+            to { transform: scale(1.3); filter: brightness(1.5); }
+        }
+
+        /* Bonus marker */
+        .bonus-marker {
+            font-size: 24px;
+            animation: bonus-bounce 0.6s infinite alternate;
+            filter: drop-shadow(0 0 8px rgba(255,255,255,0.6));
+        }
+        @@keyframes bonus-bounce { from{transform:translateY(0)} to{transform:translateY(-6px)} }
+
+        /* Scoreboard overlay */
+        .scoreboard-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            padding-top: calc(20px + var(--safe-top));
+            overflow-y: auto;
+        }
+        .scoreboard-overlay.show { display: flex; }
+        .sb-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .sb-header h2 { font-size: 14px; color: var(--pac-yellow); }
+        .sb-close {
+            background: none;
+            border: 1px solid #555;
+            color: #FFF;
+            font-size: 10px;
+            padding: 6px 10px;
+            font-family: 'Press Start 2P', monospace;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .sb-table { width: 100%; }
+        .sb-row {
+            display: flex;
+            padding: 8px 4px;
+            border-bottom: 1px solid #222;
+            align-items: center;
+            gap: 8px;
+        }
+        .sb-rank { width: 30px; font-size: 12px; text-align: center; }
+        .sb-name { flex: 1; font-size: 9px; color: #FFF; overflow: hidden; text-overflow: ellipsis; }
+        .sb-score { font-size: 11px; color: var(--pac-yellow); }
+        .sb-dots-count { font-size: 7px; color: #888; }
+
+        /* Name entry modal */
+        .modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.98);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.hidden { display: none; }
+        .modal-content {
+            text-align: center;
+            padding: 30px;
+            max-width: 400px;
+            width: 90%;
+        }
+        .modal-content h2 { font-size: 16px; margin-bottom: 20px; }
+        .modal-content input {
+            width: 100%;
+            padding: 14px;
+            background: #000;
+            border: 2px solid var(--pac-yellow);
+            color: var(--pac-yellow);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px;
+            text-align: center;
+            border-radius: 4px;
+            outline: none;
+            margin-bottom: 12px;
+        }
+        .modal-content input:focus { border-color: #00BFFF; }
+        .modal-content .btn-go {
+            width: 100%;
+            padding: 14px;
+            background: var(--pac-yellow);
+            color: #000;
+            border: none;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .modal-content .error {
+            color: #FF4444;
+            font-size: 8px;
+            margin-top: 8px;
+        }
+        .team-select {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .team-btn {
+            padding: 8px 12px;
+            border: 2px solid #555;
+            background: transparent;
+            color: #FFF;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .team-btn.selected { border-color: var(--pac-yellow); background: #222; }
+
+        /* Waiting screen */
+        .waiting-screen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000;
+            z-index: 2500;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+        .waiting-screen.hidden { display: none; }
+        .waiting-screen h2 { font-size: 14px; color: var(--pac-yellow); text-align: center; }
+        .waiting-screen .game-code {
+            font-size: 28px;
+            color: #FFF;
+            letter-spacing: 8px;
+        }
+        .waiting-dots {
+            display: flex; gap: 6px;
+        }
+        .waiting-dots span {
+            width: 8px; height: 8px;
+            background: var(--pac-yellow);
+            border-radius: 50%;
+            animation: waitdot 1.2s infinite;
+        }
+        .waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @@keyframes waitdot { 0%,80%,100%{transform:scale(0.5);opacity:0.3} 40%{transform:scale(1);opacity:1} }
+
+        /* Collection feedback */
+        .collect-feedback {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            color: var(--pac-yellow);
+            text-shadow: 0 0 20px var(--pac-yellow);
+            z-index: 1500;
+            pointer-events: none;
+            animation: feedbackPop 0.8s forwards;
+        }
+        @@keyframes feedbackPop {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            30% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -70%) scale(1); opacity: 0; }
+        }
+
+        /* Frozen overlay */
+        .frozen-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(33,33,222,0.3);
+            z-index: 1800;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .frozen-overlay.show { display: flex; }
+        .frozen-overlay .frozen-text {
+            font-size: 20px;
+            color: #FFF;
+            animation: frozenPulse 1s infinite;
+        }
+        @@keyframes frozenPulse { 50% { opacity: 0.4; } }
+
+        /* Game over */
+        .gameover-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 20px;
+        }
+        .gameover-overlay.show { display: flex; }
+        .gameover-overlay h1 { font-size: 24px; color: var(--pac-yellow); }
+
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(transparent 0px, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px);
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+
+    <!-- Name entry modal -->
+    <div class="modal" id="nameModal">
+        <div class="modal-content">
+            <h2>ENTER YOUR NAME</h2>
+            <input type="text" id="playerNameInput" placeholder="PLAYER NAME" maxlength="20" autocomplete="off" />
+            <div id="teamSelect" class="team-select" style="display:none"></div>
+            <button class="btn-go" onclick="submitName()">START</button>
+            <div class="error" id="nameError"></div>
+        </div>
+    </div>
+
+    <!-- Waiting screen -->
+    <div class="waiting-screen hidden" id="waitingScreen">
+        <h2>WAITING FOR<br>GAME TO START</h2>
+        <div class="game-code" id="waitingGameCode"></div>
+        <div class="waiting-dots"><span></span><span></span><span></span></div>
+        <div style="font-size:8px;color:#888" id="waitingPlayers">0 PLAYERS</div>
+    </div>
+
+    <!-- Frozen overlay -->
+    <div class="frozen-overlay" id="frozenOverlay">
+        <div class="frozen-text">FROZEN!</div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="gameover-overlay" id="gameoverOverlay">
+        <h1>GAME OVER</h1>
+        <div id="finalScoreboard"></div>
+        <button class="hud-btn" onclick="location.href='/'">BACK TO MENU</button>
+    </div>
+
+    <!-- Main game UI -->
+    <div class="app" id="gameApp" style="display:none">
+        <div class="header">
+            <div>
+                <div class="title">PACMAN GPS</div>
+                <div class="dot-count" id="dotCounter">0/0</div>
+            </div>
+            <div class="score-display" id="scoreDisplay">0</div>
+            <div class="status-dots">
+                <div class="dot off" id="gpsDot" title="GPS"></div>
+                <div class="dot off" id="signalDot" title="Signal"></div>
+            </div>
+        </div>
+        <div class="map-wrap">
+            <div id="map"></div>
+            <button class="btn-center" onclick="centerOnPlayer()">+</button>
+        </div>
+        <div class="hud">
+            <div class="power-ups-hud" id="powerUpsHud"></div>
+            <div class="hud-buttons">
+                <button class="hud-btn" onclick="toggleScoreboard()">SCORE</button>
+                <button class="hud-btn" onclick="centerOnPlayer()">CENTER</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scoreboard overlay -->
+    <div class="scoreboard-overlay" id="scoreboardOverlay">
+        <div class="sb-header">
+            <h2>SCOREBOARD</h2>
+            <button class="sb-close" onclick="toggleScoreboard()">CLOSE</button>
+        </div>
+        <div id="scoreboardContent"></div>
+    </div>
+
+    <script src="/lib/leaflet/leaflet.js"></script>
+    <script src="/lib/microsoft-signalr/signalr.min.js"></script>
+    <script>
+    (function() {
+        // ==================== State ====================
+        const params = new URLSearchParams(location.search);
+        const gameId = params.get('game');
+        if (!gameId) { location.href = '/'; return; }
+
+        let playerName = localStorage.getItem(`pacman_name_${gameId}`) || '';
+        let selectedTeam = null;
+        let gameData = null;
+        let map, dotLayer, playerMarker, accuracyCircle;
+        let otherPlayers = {};
+        let ghostMarkers = {};
+        let bonusMarkers = {};
+        let powerUpMarkers = {};
+        let userLat = null, userLng = null, userAcc = null;
+        let watchId = null;
+        let score = 0;
+        let totalDots = 0;
+        let collectedDots = 0;
+        let isEating = false;
+        let eatTimeout = null;
+        let connection = null;
+        let dotObjects = {};
+
+        // ==================== Audio ====================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playWaka() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.value = isEating ? 600 : 400;
+            isEating = !isEating;
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+        }
+
+        function playPowerUp() {
+            [523, 659, 784, 1047].forEach((f, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.frequency.value = f;
+                osc.type = 'square';
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime + i * 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + i * 0.1 + 0.1);
+                osc.start(audioCtx.currentTime + i * 0.1);
+                osc.stop(audioCtx.currentTime + i * 0.1 + 0.1);
+            });
+        }
+
+        function playBonus() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+        }
+
+        function playGhostCaught() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.5);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        // ==================== Init ====================
+        async function init() {
+            // Load game data
+            const res = await fetch(`/api/games/${gameId}`);
+            if (!res.ok) { alert('Game not found'); location.href = '/'; return; }
+            gameData = await res.json();
+            totalDots = gameData.dotCount + gameData.powerUpCount;
+
+            // Show name modal or skip if already registered
+            if (playerName) {
+                await tryJoinAndStart();
+            } else {
+                document.getElementById('nameModal').classList.remove('hidden');
+                if (gameData.settings.teamsEnabled && gameData.teams.length > 0) {
+                    showTeamSelect();
+                }
+            }
+        }
+
+        function showTeamSelect() {
+            const container = document.getElementById('teamSelect');
+            container.style.display = 'flex';
+            gameData.teams.forEach(t => {
+                const btn = document.createElement('button');
+                btn.className = 'team-btn';
+                btn.style.borderColor = t.color;
+                btn.style.color = t.color;
+                btn.textContent = t.name.toUpperCase();
+                btn.onclick = () => {
+                    document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    selectedTeam = t.name;
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        window.submitName = async function() {
+            const name = document.getElementById('playerNameInput').value.trim();
+            if (!name) { document.getElementById('nameError').textContent = 'Enter a name'; return; }
+
+            if (gameData.settings.teamsEnabled && !selectedTeam) {
+                document.getElementById('nameError').textContent = 'Select a team';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/games/${gameId}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, team: selectedTeam })
+                });
+                if (res.status === 409) {
+                    document.getElementById('nameError').textContent = 'Name taken';
+                    return;
+                }
+                if (!res.ok) throw new Error();
+
+                playerName = name;
+                localStorage.setItem(`pacman_name_${gameId}`, name);
+                document.getElementById('nameModal').classList.add('hidden');
+                await tryJoinAndStart();
+            } catch {
+                document.getElementById('nameError').textContent = 'Connection error';
+            }
+        };
+
+        async function tryJoinAndStart() {
+            if (gameData.status === 'waiting') {
+                showWaitingScreen();
+            } else if (gameData.status === 'finished') {
+                showGameOver(null);
+            } else {
+                await startGame();
+            }
+            await connectSignalR();
+        }
+
+        function showWaitingScreen() {
+            document.getElementById('waitingScreen').classList.remove('hidden');
+            document.getElementById('waitingGameCode').textContent = gameId;
+            document.getElementById('waitingPlayers').textContent = `${gameData.playerCount} PLAYERS`;
+        }
+
+        // ==================== SignalR ====================
+        async function connectSignalR() {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl('/pacmanHub')
+                .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 30000])
+                .build();
+
+            connection.on('PlayerJoined', (name) => {
+                gameData.playerCount++;
+                document.getElementById('waitingPlayers').textContent = `${gameData.playerCount} PLAYERS`;
+            });
+
+            connection.on('PlayerMoved', (data) => {
+                updateOtherPlayer(data.name, data.lat, data.lng);
+            });
+
+            connection.on('DotsCollected', (data) => {
+                data.dotIds.forEach(id => removeDot(id));
+                data.powerUpIds.forEach(id => removePowerUp(id));
+                collectedDots += data.dotIds.length + data.powerUpIds.length;
+                updateDotCounter();
+
+                if (data.playerName === playerName) {
+                    score = data.totalScore;
+                    updateScore();
+                    if (data.dotIds.length > 0) playWaka();
+                    if (data.powerUpIds.length > 0) playPowerUp();
+                    showCollectFeedback(`+${data.pointsEarned}`);
+
+                    // Trigger eating animation
+                    if (playerMarker) {
+                        playerMarker.getElement()?.querySelector('.pacman-marker')?.classList.add('eating');
+                        clearTimeout(eatTimeout);
+                        eatTimeout = setTimeout(() => {
+                            playerMarker.getElement()?.querySelector('.pacman-marker')?.classList.remove('eating');
+                        }, 500);
+                    }
+                }
+            });
+
+            connection.on('PowerUpCollected', (data) => {
+                // Handled by DotsCollected
+            });
+
+            connection.on('BonusSpawned', (data) => {
+                addBonusMarker(data);
+            });
+
+            connection.on('BonusDespawned', (id) => {
+                removeBonusMarker(id);
+            });
+
+            connection.on('GhostMoved', (ghosts) => {
+                updateGhosts(ghosts);
+            });
+
+            connection.on('GhostCaughtPlayer', (data) => {
+                if (data.playerName === playerName) {
+                    playGhostCaught();
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    if (data.ghostEffect === 'freeze' || data.ghostEffect === 'both') {
+                        document.getElementById('frozenOverlay').classList.add('show');
+                        setTimeout(() => document.getElementById('frozenOverlay').classList.remove('show'),
+                            data.ghostEffect === 'both' ? 20000 : 30000);
+                    }
+                    // Refresh score
+                    refreshScoreboard();
+                }
+            });
+
+            connection.on('GhostEaten', (data) => {
+                if (data.playerName === playerName) {
+                    showCollectFeedback(`GHOST +${data.points}`);
+                    playBonus();
+                    score += data.points;
+                    updateScore();
+                }
+            });
+
+            connection.on('GameStarted', async (data) => {
+                gameData.status = 'active';
+                gameData.startedAt = data.startedAt;
+                gameData.endsAt = data.endsAt;
+                document.getElementById('waitingScreen').classList.add('hidden');
+                await startGame();
+            });
+
+            connection.on('GameEnded', (scoreboard) => {
+                showGameOver(scoreboard);
+            });
+
+            connection.on('GameReset', () => {
+                location.reload();
+            });
+
+            connection.onreconnected(() => {
+                document.getElementById('signalDot').className = 'dot signal';
+                connection.invoke('JoinGame', gameId, playerName);
+            });
+            connection.onreconnecting(() => {
+                document.getElementById('signalDot').className = 'dot off';
+            });
+
+            try {
+                await connection.start();
+                document.getElementById('signalDot').className = 'dot signal';
+                await connection.invoke('JoinGame', gameId, playerName);
+            } catch (err) {
+                console.error('SignalR error:', err);
+            }
+        }
+
+        // ==================== Map ====================
+        async function startGame() {
+            document.getElementById('gameApp').style.display = 'flex';
+
+            map = L.map('map', {
+                center: [gameData.centerLat, gameData.centerLng],
+                zoom: 17,
+                zoomControl: false,
+                preferCanvas: true,
+                attributionControl: false
+            });
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 20,
+                subdomains: 'abcd'
+            }).addTo(map);
+
+            dotLayer = L.layerGroup().addTo(map);
+
+            // Load dots
+            const dotsRes = await fetch(`/api/games/${gameId}/dots`);
+            const dotsData = await dotsRes.json();
+
+            // Render dots
+            dotsData.dots.forEach(d => {
+                if (d.collected) { collectedDots++; return; }
+                const marker = L.circleMarker([d.lat, d.lng], {
+                    radius: 3,
+                    fillColor: '#FFD700',
+                    fillOpacity: 0.9,
+                    stroke: false,
+                    interactive: false
+                });
+                dotLayer.addLayer(marker);
+                dotObjects[d.id] = marker;
+            });
+
+            // Render power pellets
+            dotsData.powerUps.forEach(p => {
+                if (p.collected) { collectedDots++; return; }
+                const colors = { multiplier: '#FFD700', magnet: '#00FF88', ghost: '#00BFFF', steal: '#FF4444' };
+                const marker = L.circleMarker([p.lat, p.lng], {
+                    radius: 7,
+                    fillColor: colors[p.type] || '#FFB8FF',
+                    fillOpacity: 1,
+                    stroke: true,
+                    color: '#FFF',
+                    weight: 2,
+                    interactive: false,
+                    className: 'power-pellet-pulse'
+                });
+                dotLayer.addLayer(marker);
+                powerUpMarkers[p.id] = marker;
+                dotObjects[p.id] = marker;
+
+                // Cycle colors
+                cyclePowerUpColor(p.id, marker);
+            });
+
+            // Render existing bonuses
+            dotsData.bonusItems.forEach(b => addBonusMarker(b));
+
+            // Render ghosts
+            dotsData.ghosts.forEach(g => updateGhostMarker(g));
+
+            updateDotCounter();
+
+            // Start GPS
+            startGPS();
+
+            // Start heartbeat
+            setInterval(sendHeartbeat, 30000);
+
+            // Start scoreboard refresh
+            setInterval(refreshScoreboard, 10000);
+
+            // Start time check
+            if (gameData.endsAt) {
+                setInterval(checkTimeLimit, 5000);
+            }
+        }
+
+        function cyclePowerUpColor(id, marker) {
+            const colors = ['#FFD700', '#00FF88', '#00BFFF', '#FF4444'];
+            const types = ['multiplier', 'magnet', 'ghost', 'steal'];
+            let idx = 0;
+
+            setInterval(() => {
+                if (!powerUpMarkers[id]) return;
+                idx = (idx + 1) % colors.length;
+                marker.setStyle({ fillColor: colors[idx] });
+            }, (gameData?.settings?.powerUpCycleSeconds || 20) * 1000);
+        }
+
+        // ==================== GPS ====================
+        function startGPS() {
+            if (!navigator.geolocation) {
+                alert('GPS not available');
+                return;
+            }
+
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    userLat = pos.coords.latitude;
+                    userLng = pos.coords.longitude;
+                    userAcc = pos.coords.accuracy;
+
+                    document.getElementById('gpsDot').className = 'dot gps';
+                    updatePlayerPosition();
+
+                    // Send to server
+                    if (connection?.state === 'Connected') {
+                        connection.invoke('UpdatePosition', gameId, playerName, userLat, userLng)
+                            .catch(err => console.error('Position update error:', err));
+                    }
+                },
+                (err) => {
+                    console.error('GPS error:', err);
+                    document.getElementById('gpsDot').className = 'dot off';
+                },
+                { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+            );
+        }
+
+        function updatePlayerPosition() {
+            if (!map || userLat === null) return;
+
+            if (!playerMarker) {
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div class="pacman-marker" style="background:${getPlayerColor()}; clip-path: polygon(100% 50%, 50% 50%, 75% 20%, 100% 0, 100% 100%, 75% 80%)"></div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                playerMarker = L.marker([userLat, userLng], { icon, interactive: false, zIndexOffset: 1000 }).addTo(map);
+                accuracyCircle = L.circle([userLat, userLng], {
+                    radius: userAcc,
+                    color: '#00BFFF',
+                    fillColor: '#00BFFF',
+                    fillOpacity: 0.1,
+                    weight: 1,
+                    interactive: false
+                }).addTo(map);
+                map.setView([userLat, userLng], 17);
+            } else {
+                playerMarker.setLatLng([userLat, userLng]);
+                accuracyCircle.setLatLng([userLat, userLng]);
+                accuracyCircle.setRadius(userAcc);
+            }
+        }
+
+        function getPlayerColor() {
+            // Will be set by server response, default yellow
+            return '#FFD700';
+        }
+
+        window.centerOnPlayer = function() {
+            if (map && userLat !== null) map.setView([userLat, userLng], 17);
+        };
+
+        // ==================== Other Players ====================
+        function updateOtherPlayer(name, lat, lng) {
+            if (name === playerName) return;
+
+            if (otherPlayers[name]) {
+                otherPlayers[name].marker.setLatLng([lat, lng]);
+            } else {
+                const color = '#FF6384'; // Other player color
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div style="text-align:center">
+                        <div class="other-player-marker" style="background:${color}; clip-path: polygon(100% 50%, 50% 50%, 75% 25%, 100% 0, 100% 100%, 75% 75%); margin:0 auto;"></div>
+                        <div class="player-name-label">${name}</div>
+                    </div>`,
+                    iconSize: [60, 40],
+                    iconAnchor: [30, 14]
+                });
+                otherPlayers[name] = {
+                    marker: L.marker([lat, lng], { icon, interactive: false, zIndexOffset: 500 }).addTo(map)
+                };
+            }
+        }
+
+        // ==================== Ghosts ====================
+        function updateGhosts(ghosts) {
+            if (!map) return;
+            ghosts.forEach(g => updateGhostMarker(g));
+        }
+
+        function updateGhostMarker(g) {
+            if (ghostMarkers[g.name]) {
+                ghostMarkers[g.name].setLatLng([g.lat, g.lng]);
+            } else {
+                const icon = L.divIcon({
+                    className: '',
+                    html: `<div class="ghost-marker" style="background:${g.color}"></div>`,
+                    iconSize: [26, 33],
+                    iconAnchor: [13, 16]
+                });
+                ghostMarkers[g.name] = L.marker([g.lat, g.lng], { icon, interactive: false, zIndexOffset: 800 }).addTo(map);
+            }
+        }
+
+        // ==================== Bonus Items ====================
+        const bonusEmojis = { cherry: '\u{1F352}', strawberry: '\u{1F353}', orange: '\u{1F34A}', apple: '\u{1F34E}', melon: '\u{1F348}' };
+
+        function addBonusMarker(data) {
+            if (!map) return;
+            const emoji = bonusEmojis[data.type] || '\u{1F352}';
+            const icon = L.divIcon({
+                className: '',
+                html: `<div class="bonus-marker">${emoji}</div>`,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            bonusMarkers[data.id] = L.marker([data.lat, data.lng], { icon, interactive: false, zIndexOffset: 600 }).addTo(map);
+
+            // Auto-remove when expired
+            const expiresIn = new Date(data.expiresAt) - Date.now();
+            if (expiresIn > 0) {
+                setTimeout(() => removeBonusMarker(data.id), expiresIn);
+            }
+        }
+
+        function removeBonusMarker(id) {
+            if (bonusMarkers[id]) {
+                map.removeLayer(bonusMarkers[id]);
+                delete bonusMarkers[id];
+            }
+        }
+
+        // ==================== Dot Collection ====================
+        function removeDot(id) {
+            if (dotObjects[id]) {
+                dotLayer.removeLayer(dotObjects[id]);
+                delete dotObjects[id];
+            }
+        }
+
+        function removePowerUp(id) {
+            if (dotObjects[id]) {
+                dotLayer.removeLayer(dotObjects[id]);
+                delete dotObjects[id];
+            }
+            delete powerUpMarkers[id];
+        }
+
+        function showCollectFeedback(text) {
+            const el = document.createElement('div');
+            el.className = 'collect-feedback';
+            el.textContent = text;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+
+        // ==================== HUD ====================
+        function updateScore() {
+            document.getElementById('scoreDisplay').textContent = score.toLocaleString();
+        }
+
+        function updateDotCounter() {
+            document.getElementById('dotCounter').textContent = `${collectedDots}/${totalDots}`;
+        }
+
+        function updatePowerUpsHud(powerUps) {
+            const hud = document.getElementById('powerUpsHud');
+            hud.innerHTML = '';
+            const colors = { multiplier: '#FFD700', magnet: '#00FF88', ghost: '#00BFFF', steal: '#FF4444' };
+            const labels = { multiplier: '2x SCORE', magnet: 'MAGNET', ghost: 'GHOST', steal: 'STEAL' };
+            powerUps.forEach(pu => {
+                const remaining = Math.max(0, Math.ceil((new Date(pu.expiresAt) - Date.now()) / 1000));
+                if (remaining <= 0) return;
+                const badge = document.createElement('div');
+                badge.className = 'power-badge';
+                badge.style.background = colors[pu.type];
+                badge.textContent = `${labels[pu.type]} ${remaining}s`;
+                hud.appendChild(badge);
+            });
+        }
+
+        // ==================== Scoreboard ====================
+        window.toggleScoreboard = function() {
+            const overlay = document.getElementById('scoreboardOverlay');
+            overlay.classList.toggle('show');
+            if (overlay.classList.contains('show')) refreshScoreboard();
+        };
+
+        async function refreshScoreboard() {
+            try {
+                const res = await fetch(`/api/games/${gameId}/scoreboard`);
+                const data = await res.json();
+                renderScoreboard(data);
+            } catch {}
+        }
+
+        function renderScoreboard(data) {
+            const container = document.getElementById('scoreboardContent');
+            const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+
+            if (data.teams) {
+                container.innerHTML = data.teamScores.map((team, i) =>
+                    `<div style="margin-bottom:16px">
+                        <div style="font-size:10px;color:${team.color};margin-bottom:8px">${medals[i]||''} ${team.name} - ${team.score} PTS</div>
+                        ${team.players.map(p => `<div class="sb-row"><div class="sb-name" style="padding-left:20px">${p.name}</div><div class="sb-score">${p.score}</div></div>`).join('')}
+                    </div>`
+                ).join('');
+            } else {
+                container.innerHTML = data.players.map((p, i) =>
+                    `<div class="sb-row" style="${p.name === playerName ? 'background:#111' : ''}">
+                        <div class="sb-rank">${medals[i] || (i+1)}</div>
+                        <div class="sb-name">${p.name}</div>
+                        <div class="sb-dots-count">${p.dotsEaten} dots</div>
+                        <div class="sb-score">${p.score}</div>
+                    </div>`
+                ).join('');
+            }
+        }
+
+        // ==================== Game Over ====================
+        function showGameOver(scoreboard) {
+            const overlay = document.getElementById('gameoverOverlay');
+            overlay.classList.add('show');
+            if (scoreboard) {
+                document.getElementById('finalScoreboard').innerHTML = '';
+                renderFinalScoreboard(scoreboard);
+            }
+        }
+
+        function renderFinalScoreboard(data) {
+            const container = document.getElementById('finalScoreboard');
+            const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+            const players = data.teams ? [] : (data.players || []);
+
+            container.innerHTML = players.map((p, i) =>
+                `<div class="sb-row">
+                    <div class="sb-rank">${medals[i] || (i+1)}</div>
+                    <div class="sb-name">${p.name}</div>
+                    <div class="sb-score">${p.score}</div>
+                </div>`
+            ).join('');
+        }
+
+        // ==================== Heartbeat ====================
+        async function sendHeartbeat() {
+            if (!userLat) return;
+            try {
+                await fetch(`/api/games/${gameId}/heartbeat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: playerName, lat: userLat, lng: userLng })
+                });
+            } catch {}
+        }
+
+        // ==================== Time Check ====================
+        function checkTimeLimit() {
+            if (!gameData.endsAt) return;
+            if (new Date(gameData.endsAt) <= new Date()) {
+                showGameOver(null);
+                refreshScoreboard();
+            }
+        }
+
+        // ==================== Start ====================
+        init();
+    })();
+    </script>
+</body>
+</html>

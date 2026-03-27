@@ -1,0 +1,266 @@
+@page
+@{
+    ViewData["Title"] = "Home";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no,viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>PACMAN GPS</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: #000;
+            color: #FFD700;
+            font-family: 'Press Start 2P', monospace;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+        .container {
+            width: 100%;
+            max-width: 480px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            padding-top: calc(20px + env(safe-area-inset-top));
+        }
+        h1 {
+            font-size: 28px;
+            text-align: center;
+            text-shadow: 0 0 20px #FFD700, 0 0 40px #FF8C00;
+            margin-top: 30px;
+        }
+        .pacman-anim {
+            width: 80px; height: 80px;
+            margin: 10px auto;
+            position: relative;
+        }
+        .pacman-anim .pac {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: #FFD700;
+            position: relative;
+            animation: chomp 0.4s infinite;
+        }
+        @@keyframes chomp {
+            0%, 100% { clip-path: polygon(100% 50%, 50% 50%, 80% 15%, 100% 0, 100% 100%, 80% 85%); background: #FFD700; }
+            50% { clip-path: polygon(100% 50%, 50% 50%, 60% 40%, 100% 0, 100% 100%, 60% 60%); }
+        }
+        .pac { clip-path: polygon(100% 0, 100% 100%, 50% 50%); }
+        .dots-trail {
+            position: absolute;
+            top: 50%;
+            right: -120px;
+            display: flex;
+            gap: 16px;
+            transform: translateY(-50%);
+        }
+        .dots-trail span {
+            width: 10px; height: 10px;
+            background: #FFD700;
+            border-radius: 50%;
+            animation: dotfade 0.8s infinite;
+        }
+        .dots-trail span:nth-child(2) { animation-delay: 0.2s; }
+        .dots-trail span:nth-child(3) { animation-delay: 0.4s; }
+        .dots-trail span:nth-child(4) { animation-delay: 0.6s; }
+        @@keyframes dotfade { 0%,60%{opacity:1} 80%,100%{opacity:0} }
+
+        .subtitle {
+            font-size: 10px;
+            color: #00BFFF;
+            text-align: center;
+            line-height: 1.8;
+        }
+        .join-section {
+            width: 100%;
+            background: #111;
+            border: 2px solid #2121DE;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .join-section label {
+            font-size: 10px;
+            color: #00BFFF;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            background: #000;
+            border: 2px solid #FFD700;
+            color: #FFD700;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 16px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            border-radius: 4px;
+            outline: none;
+        }
+        input[type="text"]::placeholder {
+            color: #555;
+            letter-spacing: 2px;
+            font-size: 10px;
+        }
+        input[type="text"]:focus { border-color: #00BFFF; box-shadow: 0 0 10px #00BFFF40; }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .btn-play {
+            background: #FFD700;
+            color: #000;
+        }
+        .btn-play:hover { background: #FFF; box-shadow: 0 0 20px #FFD70080; }
+        .btn-admin {
+            background: transparent;
+            border: 1px solid #555;
+            color: #555;
+            font-size: 9px;
+            padding: 10px;
+        }
+        .btn-admin:hover { border-color: #FFD700; color: #FFD700; }
+        .error {
+            color: #FF4444;
+            font-size: 8px;
+            text-align: center;
+            display: none;
+        }
+        .ghosts {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        .ghost-icon {
+            width: 30px; height: 34px;
+            border-radius: 50% 50% 0 0;
+            position: relative;
+            animation: ghostfloat 1s ease-in-out infinite alternate;
+        }
+        .ghost-icon::after {
+            content: '';
+            position: absolute;
+            bottom: -4px; left: 0; right: 0;
+            height: 8px;
+            background: inherit;
+            clip-path: polygon(0 0, 20% 100%, 40% 0, 60% 100%, 80% 0, 100% 100%, 100% 0);
+        }
+        @@keyframes ghostfloat { from{transform:translateY(0)} to{transform:translateY(-4px)} }
+
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                transparent 0px, transparent 2px,
+                rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+            );
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="container">
+        <h1>PACMAN<br>GPS</h1>
+
+        <div class="pacman-anim">
+            <div class="pac"></div>
+            <div class="dots-trail">
+                <span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+
+        <div class="ghosts">
+            <div class="ghost-icon" style="background:#FF0000"></div>
+            <div class="ghost-icon" style="background:#FFB8FF"></div>
+            <div class="ghost-icon" style="background:#00FFFF"></div>
+            <div class="ghost-icon" style="background:#FFB852"></div>
+        </div>
+
+        <div class="subtitle">
+            REAL WORLD<br>MULTIPLAYER PACMAN
+        </div>
+
+        <div class="join-section">
+            <label>ENTER GAME CODE</label>
+            <input type="text" id="gameCode" placeholder="ABC123" maxlength="6" autocomplete="off" />
+            <div class="error" id="errorMsg"></div>
+            <button class="btn btn-play" onclick="joinGame()">JOIN GAME</button>
+        </div>
+
+        <a href="/Admin" class="btn btn-admin">ADMIN PANEL</a>
+    </div>
+
+    <script>
+        const codeInput = document.getElementById('gameCode');
+        const errorMsg = document.getElementById('errorMsg');
+
+        // Check URL params for game code
+        const params = new URLSearchParams(location.search);
+        if (params.get('game')) {
+            codeInput.value = params.get('game').toUpperCase();
+            joinGame();
+        }
+
+        codeInput.addEventListener('input', () => {
+            codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            errorMsg.style.display = 'none';
+        });
+
+        codeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') joinGame();
+        });
+
+        async function joinGame() {
+            const code = codeInput.value.trim();
+            if (code.length < 4) {
+                showError('Enter a valid game code');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/games/${code}`);
+                if (!res.ok) {
+                    showError('Game not found');
+                    return;
+                }
+                const game = await res.json();
+                location.href = `/Play?game=${game.id}`;
+            } catch {
+                showError('Connection error');
+            }
+        }
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
