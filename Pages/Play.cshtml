@@ -138,23 +138,29 @@
 
         /* Pacman player marker */
         .pacman-marker {
-            width: 28px; height: 28px;
+            width: 44px; height: 44px;
             border-radius: 50%;
             position: relative;
-            filter: drop-shadow(0 0 6px rgba(255,215,0,0.6));
+            filter: drop-shadow(0 0 10px rgba(255,215,0,0.8));
+            animation: pacman-idle 0.6s infinite;
+        }
+        @@keyframes pacman-idle {
+            0%, 100% { clip-path: polygon(100% 50%, 50% 50%, 82% 24%, 100% 0, 100% 100%, 82% 76%); }
+            50% { clip-path: polygon(100% 50%, 50% 50%, 68% 38%, 100% 0, 100% 100%, 68% 62%); }
         }
         .pacman-marker.eating {
-            animation: pacman-chomp 0.3s infinite;
+            animation: pacman-chomp 0.2s infinite;
         }
         @@keyframes pacman-chomp {
             0%, 100% { clip-path: circle(50%); }
-            50% { clip-path: polygon(100% 50%, 50% 50%, 75% 20%, 100% 0, 100% 100%, 75% 80%); }
+            50% { clip-path: polygon(100% 50%, 50% 50%, 82% 18%, 100% 0, 100% 100%, 82% 82%); }
         }
         .other-player-marker {
-            width: 22px; height: 22px;
+            width: 32px; height: 32px;
             border-radius: 50%;
             border: 2px solid #FFF;
-            filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
+            filter: drop-shadow(0 0 6px rgba(255,255,255,0.5));
+            animation: pacman-idle 0.6s infinite;
         }
         .player-name-label {
             font-family: 'Press Start 2P', monospace;
@@ -881,9 +887,9 @@
             if (!playerMarker) {
                 const icon = L.divIcon({
                     className: '',
-                    html: `<div class="pacman-marker" style="background:${getPlayerColor()}; clip-path: polygon(100% 50%, 50% 50%, 75% 20%, 100% 0, 100% 100%, 75% 80%)"></div>`,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    html: `<div class="pacman-marker" style="background:${getPlayerColor()}"></div>`,
+                    iconSize: [44, 44],
+                    iconAnchor: [22, 22]
                 });
                 playerMarker = L.marker([userLat, userLng], { icon, interactive: false, zIndexOffset: 1000 }).addTo(map);
                 accuracyCircle = L.circle([userLat, userLng], {
@@ -922,11 +928,11 @@
                 const icon = L.divIcon({
                     className: '',
                     html: `<div style="text-align:center">
-                        <div class="other-player-marker" style="background:${color}; clip-path: polygon(100% 50%, 50% 50%, 75% 25%, 100% 0, 100% 100%, 75% 75%); margin:0 auto;"></div>
+                        <div class="other-player-marker" style="background:${color}; margin:0 auto;"></div>
                         <div class="player-name-label">${name}</div>
                     </div>`,
-                    iconSize: [60, 40],
-                    iconAnchor: [30, 14]
+                    iconSize: [60, 46],
+                    iconAnchor: [30, 16]
                 });
                 otherPlayers[name] = {
                     marker: L.marker([lat, lng], { icon, interactive: false, zIndexOffset: 500 }).addTo(map)
