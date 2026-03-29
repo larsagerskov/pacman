@@ -214,7 +214,7 @@
     <!-- Dashboard -->
     <div class="dashboard" id="dashboard">
         <div class="dash-header">
-            <h2>PACMAN GPS ADMIN</h2>
+            <h2><a href="/" style="color:#FFD700;text-decoration:none">PACMAN GPS</a> ADMIN</h2>
             <button class="btn btn-small btn-outline" onclick="toggleCreate()">+ NEW GAME</button>
         </div>
 
@@ -312,6 +312,7 @@
             <div class="qr-section">
                 <div style="font-size:9px;margin-bottom:4px">SHARE GAME</div>
                 <div class="join-url" id="joinUrl"></div>
+                <button class="btn btn-blue btn-small" style="margin:8px auto;display:block" onclick="shareSelectedGame()">SHARE LINK</button>
                 <img id="qrCode" width="200" height="200" alt="QR Code" />
             </div>
         </div>
@@ -598,6 +599,22 @@
             selectedGameId = null;
             document.getElementById('gameDashboard').classList.remove('show');
             loadGames();
+        };
+
+        window.shareSelectedGame = async function() {
+            if (!selectedGameId) return;
+            const url = `${location.origin}/?game=${selectedGameId}`;
+            const shareData = {
+                title: 'Pacman GPS',
+                text: `Join my Pacman GPS game! Code: ${selectedGameId}`,
+                url: url
+            };
+            if (navigator.share) {
+                try { await navigator.share(shareData); } catch {}
+            } else {
+                await navigator.clipboard.writeText(url);
+                alert('Link copied to clipboard!');
+            }
         };
     })();
     </script>

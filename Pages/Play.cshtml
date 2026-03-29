@@ -452,7 +452,7 @@
     <div class="app" id="gameApp" style="display:none">
         <div class="header">
             <div>
-                <div class="title">PACMAN GPS</div>
+                <a href="/" class="title" style="text-decoration:none;color:var(--pac-yellow)">PACMAN GPS</a>
                 <div class="dot-count" id="dotCounter">0/0</div>
             </div>
             <div class="score-display" id="scoreDisplay">0</div>
@@ -469,6 +469,7 @@
             <div class="power-ups-hud" id="powerUpsHud"></div>
             <div class="hud-buttons">
                 <button class="hud-btn" onclick="toggleScoreboard()">SCORE</button>
+                <button class="hud-btn" onclick="shareGame()">SHARE</button>
                 <button class="hud-btn" onclick="centerOnPlayer()">CENTER</button>
             </div>
         </div>
@@ -512,19 +513,92 @@
 
         // ==================== Audio ====================
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let sirenPlaying = false;
 
+        // Classic Pacman intro melody (simplified)
+        function playIntro() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const vol = 0.12;
+            // Classic Pacman beginning jingle - B4 B5 F#5 D#5 B5 F#5 D#5 then descending
+            const notes = [
+                [493.88, 0.12], [987.77, 0.12], [739.99, 0.18], [622.25, 0.18],
+                [987.77, 0.09], [739.99, 0.30],  [622.25, 0.36],
+                [523.25, 0.12], [1046.50, 0.12], [783.99, 0.18], [659.25, 0.18],
+                [1046.50, 0.09], [783.99, 0.30], [659.25, 0.36],
+                [493.88, 0.12], [987.77, 0.12], [739.99, 0.18], [622.25, 0.18],
+                [987.77, 0.09], [739.99, 0.30], [622.25, 0.18],
+                [659.25, 0.12], [698.46, 0.12], [739.99, 0.12],
+                [783.99, 0.36], [783.99, 0.12], [739.99, 0.12],
+                [698.46, 0.12], [739.99, 0.48]
+            ];
+            let t = audioCtx.currentTime + 0.05;
+            notes.forEach(([freq, dur]) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'square';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(vol, t);
+                gain.gain.setValueAtTime(vol, t + dur * 0.8);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+                osc.start(t); osc.stop(t + dur);
+                t += dur;
+            });
+            return t - audioCtx.currentTime; // duration
+        }
+
+        // Classic waka-waka siren (background loop for 4 seconds)
+        function playSiren(durationSec) {
+            if (sirenPlaying) return;
+            sirenPlaying = true;
+            const startT = audioCtx.currentTime;
+            const endT = startT + durationSec;
+            let t = startT;
+            while (t < endT) {
+                // waka up
+                const o1 = audioCtx.createOscillator();
+                const g1 = audioCtx.createGain();
+                o1.connect(g1); g1.connect(audioCtx.destination);
+                o1.type = 'square';
+                o1.frequency.setValueAtTime(200, t);
+                o1.frequency.linearRampToValueAtTime(300, t + 0.08);
+                g1.gain.setValueAtTime(0.08, t);
+                g1.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+                o1.start(t); o1.stop(t + 0.10);
+                // waka down
+                const o2 = audioCtx.createOscillator();
+                const g2 = audioCtx.createGain();
+                o2.connect(g2); g2.connect(audioCtx.destination);
+                o2.type = 'square';
+                o2.frequency.setValueAtTime(300, t + 0.10);
+                o2.frequency.linearRampToValueAtTime(200, t + 0.18);
+                g2.gain.setValueAtTime(0.08, t + 0.10);
+                g2.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+                o2.start(t + 0.10); o2.stop(t + 0.20);
+                t += 0.22;
+            }
+            setTimeout(() => { sirenPlaying = false; }, durationSec * 1000);
+        }
+
+        // Dot eating sound - classic chomp
         function playWaka() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const t = audioCtx.currentTime;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.frequency.value = isEating ? 600 : 400;
+            osc.type = 'square';
+            const hiFreq = isEating ? 524 : 393;
             isEating = !isEating;
-            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
-            osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+            osc.frequency.setValueAtTime(hiFreq, t);
+            osc.frequency.exponentialRampToValueAtTime(hiFreq * 0.6, t + 0.07);
+            gain.gain.setValueAtTime(0.13, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+            osc.start(t); osc.stop(t + 0.09);
         }
 
         function playPowerUp() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             [523, 659, 784, 1047].forEach((f, i) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -539,6 +613,7 @@
         }
 
         function playBonus() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
@@ -551,6 +626,7 @@
         }
 
         function playGhostCaught() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
@@ -729,6 +805,9 @@
                 gameData.startedAt = data.startedAt;
                 gameData.endsAt = data.endsAt;
                 document.getElementById('waitingScreen').classList.add('hidden');
+                // Play intro melody then siren
+                const introDur = playIntro();
+                setTimeout(() => playSiren(4), introDur * 1000);
                 await startGame();
             });
 
@@ -760,6 +839,8 @@
         // ==================== Map ====================
         async function startGame() {
             document.getElementById('gameApp').style.display = 'flex';
+            // Resume audio context on user interaction
+            if (audioCtx.state === 'suspended') audioCtx.resume();
 
             map = L.map('map', {
                 center: [gameData.centerLat, gameData.centerLng],
@@ -915,6 +996,21 @@
 
         window.centerOnPlayer = function() {
             if (map && userLat !== null) map.setView([userLat, userLng], 17);
+        };
+
+        window.shareGame = async function() {
+            const url = `${location.origin}/?game=${gameId}`;
+            const shareData = {
+                title: 'Pacman GPS',
+                text: `Join my Pacman GPS game! Code: ${gameId}`,
+                url: url
+            };
+            if (navigator.share) {
+                try { await navigator.share(shareData); } catch {}
+            } else {
+                await navigator.clipboard.writeText(url);
+                showCollectFeedback('LINK COPIED');
+            }
         };
 
         // ==================== Other Players ====================
